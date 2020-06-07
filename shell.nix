@@ -7,6 +7,7 @@ stdenv.mkDerivation {
     SDL2
     SDL2_image
     autoflake
+    bash
     check
     clang-tools
     gcc
