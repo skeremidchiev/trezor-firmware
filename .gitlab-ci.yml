@@ -33,7 +33,7 @@ stages:
   - deploy
 
 before_script:
-  - command -v pipenv >/dev/null && pipenv sync --python=/usr/bin/python3
+  - command -v pipenv >/dev/null && pipenv sync --python=python3.7
 
 include:
   - ci/environment.yml
