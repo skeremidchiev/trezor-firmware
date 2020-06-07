@@ -37,14 +37,12 @@ ENV \
 
 COPY shell.nix shell.nix
 
-RUN nix-env -i -f shell.nix -A buildInputs
+RUN nix-shell --run "echo deps pre-installed"
 
 CMD [ "nix-shell" ]
 
 # the rest of the file only applies when docker build is called
 # with the following argument: "--build-arg FULLDEPS_TESTING=1"
-
-ENV TREZOR_MONERO_TESTS_PATH="/opt/trezor_monero_tests"
 
 ARG FULLDEPS_TESTING=0
 ENV FULLDEPS_TESTING=${FULLDEPS_TESTING}
@@ -62,6 +60,7 @@ RUN if [ "${FULLDEPS_TESTING}" = "1" ]; then \
 
 # download monero tests binary
 
+ENV TREZOR_MONERO_TESTS_PATH="/opt/trezor_monero_tests"
 RUN if [ "${FULLDEPS_TESTING}" = "1" ]; then \
         TREZOR_MONERO_TESTS_SHA256SUM=1e5dfdb07de4ea46088f4a5bdb0d51f040fe479019efae30f76427eee6edb3f7 ; \
         TREZOR_MONERO_TESTS_URL="https://github.com/ph4r05/monero/releases/download/v0.15.0.0-tests-u18.04-03/trezor_tests" ; \
