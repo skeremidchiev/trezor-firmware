@@ -11,7 +11,7 @@ stdenv.mkDerivation {
     binutils
     check
     clang-tools
-    gcc
+    gcc-unwrapped
     gcc-arm-embedded
     git
     gnumake
