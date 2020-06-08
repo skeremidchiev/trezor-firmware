@@ -47,17 +47,6 @@ CMD [ "nix-shell" ]
 ARG FULLDEPS_TESTING=0
 ENV FULLDEPS_TESTING=${FULLDEPS_TESTING}
 
-# install other python versions for tox testing
-
-RUN if [ "${FULLDEPS_TESTING}" = "1" ]; then \
-        nix-env -iP python3-3.8.2 ; \
-        nix-env --set-flag priority 6 python3-3.8.2 ; \
-        nix-env -iP python3-3.6.10 ; \
-        nix-env --set-flag priority 7 python3-3.6.10 ; \
-        nix-env -iP python3-3.5.9 ; \
-        nix-env --set-flag priority 8 python3-3.5.9 ; \
-    fi
-
 # download monero tests binary
 
 ENV TREZOR_MONERO_TESTS_PATH="/opt/trezor_monero_tests"
