@@ -217,6 +217,7 @@ message TxAck {
             // optional bytes prev_block_hash_bip115 = 11;     // BIP-115 support dropped
             // optional uint32 prev_block_height_bip115 = 12;  // BIP-115 support dropped
             optional bytes witness = 13;                                        // witness data, unset for tx to sign
+            optional bytes ownership_proof = 14;                                // SLIP-0019 proof of ownership, unset for tx to sign
         }
         /**
         * Structure representing compiled transaction output
