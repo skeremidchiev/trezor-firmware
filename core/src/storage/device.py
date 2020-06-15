@@ -54,6 +54,8 @@ def is_version_stored() -> bool:
 
 
 def get_version() -> Optional[bytes]:
+    if not is_version_stored():
+        set_version(common.STORAGE_VERSION_CURRENT)
     return common.get(_NAMESPACE, _VERSION)
 
 

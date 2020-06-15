@@ -2,10 +2,6 @@ from storage import cache, common, device
 from trezor import config
 
 
-def set_current_version() -> None:
-    device.set_version(common.STORAGE_VERSION_CURRENT)
-
-
 def wipe() -> None:
     config.wipe()
     cache.clear_all()
@@ -24,7 +20,6 @@ def reset() -> None:
     device_id = device.get_device_id()
     wipe()
     common.set(common.APP_DEVICE, device.DEVICE_ID, device_id.encode(), public=True)
-    set_current_version()
 
 
 def _migrate_from_version_01() -> None:
@@ -44,4 +39,4 @@ def _migrate_from_version_02() -> None:
         raise RuntimeError  # So this should not happen.
     # Because the version is written it means the device is initialized.
     common.set_bool(common.APP_DEVICE, device.INITIALIZED, True, public=True)
-    set_current_version()
+    device.set_version(common.STORAGE_VERSION_CURRENT)
