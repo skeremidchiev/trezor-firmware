@@ -6,11 +6,21 @@ bytes, string, embedded message and repeated fields.
 from micropython import const
 
 if False:
-    from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union
+    from typing import (
+        Any,
+        Awaitable,
+        Dict,
+        Iterable,
+        List,
+        Optional,
+        Type,
+        TypeVar,
+        Union,
+    )
     from typing_extensions import Protocol
 
     class AsyncReader(Protocol):
-        async def areadinto(self, buf: bytearray) -> int:
+        def areadinto(self, buf: bytearray) -> Awaitable[int]:
             """
             Reads `len(buf)` bytes into `buf`, or raises `EOFError`.
             """

@@ -4,6 +4,7 @@ from micropython import const
 from trezor import io, loop, utils
 
 if False:
+    from typing import Any, Awaitable, Generator, NoReturn, Optional
     from trezorio import WireInterface
 
 _REP_LEN = const(64)
@@ -31,6 +32,10 @@ class Reader:
         self.ofs = 0
         self.data = bytes()
 
+        self.wait = loop.wait(self.iface.iface_num() | io.POLL_READ)
+        self._buf = None  # type: Optional[bytearray]
+        self._nread = 0
+
     def __repr__(self) -> str:
         return "<Reader type: %s>" % self.type
 
@@ -40,10 +45,9 @@ class Reader:
         the first report contains the message header, `self.type` and
         `self.size` are initialized and available after `aopen()` returns.
         """
-        read = loop.wait(self.iface.iface_num() | io.POLL_READ)
         while True:
             # wait for initial report
-            report = await read
+            report = await self.wait
             marker = report[0]
             if marker == _REP_MARKER:
                 _, m1, m2, mtype, msize = ustruct.unpack(_REP_INIT, report)
@@ -57,7 +61,7 @@ class Reader:
         self.data = report[_REP_INIT_DATA : _REP_INIT_DATA + msize]
         self.ofs = 0
 
-    async def areadinto(self, buf: bytearray) -> int:
+    def areadinto(self, buf: bytearray) -> Awaitable[int]:
         """
         Read exactly `len(buf)` bytes into `buf`, waiting for additional
         reports, if needed.  Raises `EOFError` if end-of-message is encountered
@@ -66,27 +70,53 @@ class Reader:
         if self.size < len(buf):
             raise EOFError
 
-        read = loop.wait(self.iface.iface_num() | io.POLL_READ)
-        nread = 0
-        while nread < len(buf):
-            if self.ofs == len(self.data):
-                # we are at the end of received data
-                # wait for continuation report
-                while True:
-                    report = await read
-                    marker = report[0]
-                    if marker == _REP_MARKER:
-                        break
-                self.data = report[_REP_CONT_DATA : _REP_CONT_DATA + self.size]
-                self.ofs = 0
+        self._buf = buf
+        self._nread = 0
+        return self
 
-            # copy as much as possible to target buffer
-            nbytes = utils.memcpy(buf, nread, self.data, self.ofs, len(buf))
-            nread += nbytes
-            self.ofs += nbytes
-            self.size -= nbytes
+    def send(self, arg: Any) -> Any:
+        buf = self._buf
+        assert buf is not None
 
-        return nread
+        if arg is not None:
+            # we have received result of self.wait
+            marker = arg[0]
+            if marker != _REP_MARKER:
+                # wait again
+                return self.wait
+
+            # fill data from received message, reset offset
+            self.data = arg[_REP_CONT_DATA : _REP_CONT_DATA + self.size]
+            self.ofs = 0
+
+        assert self._nread < len(buf)
+
+        # copy as much as possible to target buffer
+        nbytes = utils.memcpy(buf, self._nread, self.data, self.ofs, len(buf))
+        self._nread += nbytes
+        self.ofs += nbytes
+        self.size -= nbytes
+
+        if self._nread == len(buf):
+            # we have all the data we need
+            raise StopIteration(self._nread)
+
+        # wait for new data
+        return self.wait
+
+    def throw(self, arg: Any) -> NoReturn:
+        raise arg
+
+    def close(self) -> None:
+        pass
+
+    def __iter__(self) -> Generator[Any, None, int]:
+        return self  # type: ignore
+
+    if False:
+
+        def __await__(self) -> Generator[Any, None, int]:
+            return self
 
 
 class Writer:
