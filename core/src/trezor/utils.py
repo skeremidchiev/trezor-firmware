@@ -11,6 +11,7 @@ from trezorutils import (  # noqa: F401
     consteq,
     halt,
     memcpy,
+    meminfo,
 )
 
 DISABLE_ANIMATION = 0
@@ -51,6 +52,8 @@ def unimport_end(mods: Iterable[str]) -> None:
                 pass
     # collect removed modules
     gc.collect()
+
+    meminfo("dump.json")
 
 
 def ensure(cond: bool, msg: str = None) -> None:
