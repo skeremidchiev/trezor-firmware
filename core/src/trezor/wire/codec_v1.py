@@ -67,6 +67,8 @@ class Reader:
         reports, if needed.  Raises `EOFError` if end-of-message is encountered
         before the full read can be completed.
         """
+        assert len(buf) > 0
+
         if self.size < len(buf):
             raise EOFError
 
@@ -99,6 +101,7 @@ class Reader:
 
         if self._nread == len(buf):
             # we have all the data we need
+            self._buf = None
             raise StopIteration(self._nread)
 
         # wait for new data

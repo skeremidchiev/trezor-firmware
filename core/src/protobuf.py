@@ -180,6 +180,9 @@ class LimitedReader:
         self.limit = limit
 
     async def areadinto(self, buf: bytearray) -> int:
+        if not buf:
+            raise ValueError
+
         if self.limit < len(buf):
             raise EOFError
         else:
@@ -241,12 +244,18 @@ async def load_message(
         elif isinstance(ftype, EnumType):
             fvalue = ftype.validate(ivalue)
         elif ftype is BytesType:
-            fvalue = bytearray(ivalue)
-            await reader.areadinto(fvalue)
+            if ivalue == 0:
+                fvalue = b""
+            else:
+                fvalue = bytearray(ivalue)
+                await reader.areadinto(fvalue)
         elif ftype is UnicodeType:
-            fvalue = bytearray(ivalue)
-            await reader.areadinto(fvalue)
-            fvalue = bytes(fvalue).decode()
+            if ivalue == 0:
+                fvalue = ""
+            else:
+                fvalue = bytearray(ivalue)
+                await reader.areadinto(fvalue)
+                fvalue = bytes(fvalue).decode()
         elif issubclass(ftype, MessageType):
             fvalue = await load_message(LimitedReader(reader, ivalue), ftype)
         else:
