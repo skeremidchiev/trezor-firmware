@@ -23,7 +23,7 @@ from .writers import (
 )
 
 if False:
-    from typing import List, Optional
+    from typing import List, Optional, Tuple
     from trezor.messages.TxInputType import EnumTypeInputScriptType
     from .writers import Writer
 
@@ -143,6 +143,22 @@ def input_script_p2pkh_or_p2sh(
     return w
 
 
+def read_input_script_p2pkh(
+    script_sig: bytes,
+) -> Tuple[List[bytes], List[Tuple[bytes, int]]]:
+    n, offset = read_op_push(script_sig, 0)
+    signature = script_sig[offset : offset + n - 1]
+    sighash_type = script_sig[offset + n - 1]
+    offset += n
+
+    n, offset = read_op_push(script_sig, offset)
+    if offset + n != len(script_sig):
+        raise wire.DataError("Invalid scriptSig.")
+    pubkey = script_sig[offset : offset + n]
+
+    return [pubkey], [(signature, sighash_type)]
+
+
 def output_script_p2pkh(pubkeyhash: bytes) -> bytearray:
     utils.ensure(len(pubkeyhash) == 20)
     s = bytearray(25)
@@ -253,6 +269,24 @@ def witness_p2wpkh(signature: bytes, pubkey: bytes, sighash: int) -> bytearray:
     return w
 
 
+def read_witness_p2wpkh(witness: bytes) -> Tuple[List[bytes], List[Tuple[bytes, int]]]:
+    if witness[0] != 2:
+        # num of stack items, in P2WPKH it's always 2
+        raise wire.DataError("Invalid witness.")
+
+    n, offset = read_bitcoin_varint(witness, 1)
+    signature = witness[offset : offset + n - 1]
+    sighash_type = witness[offset + n - 1]
+    offset += n
+
+    n, offset = read_bitcoin_varint(witness, offset)
+    if offset + n != len(witness):
+        raise wire.DataError("Invalid witness.")
+    pubkey = witness[offset : offset + n]
+
+    return [pubkey], [(signature, sighash_type)]
+
+
 def witness_p2wsh(
     multisig: MultisigRedeemScriptType,
     signature: bytes,
@@ -300,6 +334,31 @@ def witness_p2wsh(
     write_output_script_multisig(w, pubkeys, multisig.m)
 
     return w
+
+
+def read_witness_p2wsh(witness: bytes) -> Tuple[bytes, List[Tuple[bytes, int]]]:
+    # Get number of witness stack items.
+    item_count, offset = read_bitcoin_varint(witness, 0)
+
+    # Skip over OP_FALSE, which is due to the old OP_CHECKMULTISIG bug.
+    if witness[offset] != 0:
+        raise wire.DataError("Invalid witness.")
+    offset += 1
+
+    signatures = []
+    for i in range(item_count - 2):
+        n, offset = read_bitcoin_varint(witness, offset)
+        signature = witness[offset : offset + n - 1]
+        sighash_type = witness[offset + n - 1]
+        signatures.append((signature, sighash_type))
+        offset += n
+
+    n, offset = read_bitcoin_varint(witness, offset)
+    if offset + n != len(witness):
+        raise wire.DataError("Invalid witness.")
+    script = witness[offset : offset + n]
+
+    return script, signatures
 
 
 # Multisig
@@ -351,6 +410,34 @@ def input_script_multisig(
     return w
 
 
+def read_input_script_multisig(
+    script_sig: bytes,
+) -> Tuple[bytes, List[Tuple[bytes, int]]]:
+    offset = 0
+
+    # Skip over OP_FALSE, which is due to the old OP_CHECKMULTISIG bug.
+    if script_sig[offset] != 0:
+        raise wire.DataError("Invalid witness.")
+    offset += 1
+
+    signatures = []
+    while True:
+        n, offset = read_op_push(script_sig, offset)
+        if offset + n >= len(script_sig):
+            break
+        signature = script_sig[offset : offset + n - 1]
+        sighash_type = script_sig[offset + n - 1]
+        signatures.append((signature, sighash_type))
+        offset += n
+
+    if offset + n != len(script_sig):
+        raise wire.DataError("Invalid scriptSig.")
+
+    script = script_sig[offset : offset + n]
+
+    return script, signatures
+
+
 def output_script_multisig(pubkeys: List[bytes], m: int) -> bytearray:
     w = empty_bytearray(output_script_multisig_length(pubkeys, m))
     write_output_script_multisig(w, pubkeys, m)
@@ -374,6 +461,33 @@ def write_output_script_multisig(w: Writer, pubkeys: List[bytes], m: int) -> Non
 
 def output_script_multisig_length(pubkeys: List[bytes], m: int) -> int:
     return 1 + len(pubkeys) * (1 + 33) + 1 + 1  # see output_script_multisig
+
+
+def read_output_script_multisig(script: bytes) -> Tuple[List[bytes], int]:
+    if script[-1] != 0xAE:  # OP_CHECKMULTISIG
+        raise wire.DataError("Invalid multisig script")
+
+    if not 0x51 <= script[0] < 0x60 or not 0x51 <= script[-2] < 0x60:
+        raise wire.DataError("Invalid multisig script")
+
+    threshold = script[0] - 0x50
+    pubkey_count = script[-2] - 0x50
+    if threshold > pubkey_count:
+        raise wire.DataError("Invalid multisig script")
+
+    offset = 1
+    public_keys = []
+    for i in range(pubkey_count):
+        n, offset = read_op_push(script, offset)
+        if n != 33:
+            raise wire.DataError("Invalid multisig script")
+        public_keys.append(script[offset : offset + n])
+        offset += n
+
+    if offset + 2 != len(script):
+        raise wire.DataError("Invalid multisig script")
+
+    return public_keys, threshold
 
 
 # OP_RETURN
@@ -407,3 +521,46 @@ def append_signature(w: Writer, signature: bytes, sighash: int) -> None:
 def append_pubkey(w: Writer, pubkey: bytes) -> None:
     write_op_push(w, len(pubkey))
     write_bytes_unchecked(w, pubkey)
+
+
+def read_bitcoin_varint(data: bytes, offset: int) -> Tuple[int, int]:
+    prefix = data[offset]
+    offset += 1
+    if prefix < 253:
+        n = prefix
+    elif prefix == 253:
+        n = data[offset]
+        n += data[offset + 1] << 8
+        offset += 2
+    elif prefix == 254:
+        n = data[offset]
+        n += data[offset + 1] << 8
+        n += data[offset + 2] << 16
+        n += data[offset + 3] << 24
+        offset += 4
+    else:
+        raise wire.DataError("Invalid VarInt")
+    return n, offset
+
+
+def read_op_push(data: bytes, offset: int) -> Tuple[int, int]:
+    prefix = data[offset]
+    offset += 1
+    if prefix < 0x4C:
+        n = prefix
+    elif prefix == 0x4C:
+        n = data[offset]
+        offset += 1
+    elif prefix == 0x4D:
+        n = data[offset]
+        n += data[offset + 1] << 8
+        offset += 2
+    elif prefix == 0x4E:
+        n = data[offset]
+        n += data[offset + 1] << 8
+        n += data[offset + 2] << 16
+        n += data[offset + 3] << 24
+        offset += 4
+    else:
+        raise wire.DataError("Invalid OP_PUSH")
+    return n, offset
