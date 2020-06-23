@@ -23,6 +23,7 @@ from trezorlib.tools import parse_path
 
 @pytest.mark.skip_t1
 class TestMsgGetOwnershipProof:
+    @pytest.mark.skip_ui
     def test_ownership_id(self, client):
         ownership_id = btc.get_ownership_id(
             client,
@@ -35,6 +36,7 @@ class TestMsgGetOwnershipProof:
             == "a122407efc198211c81af4450f40b235d54775efd934d16b9e31c6ce9bad5707"
         )
 
+    @pytest.mark.skip_ui
     def test_p2wpkh_ownership_proof(self, client):
         ownership_proof, _ = btc.get_ownership_proof(
             client,
@@ -47,6 +49,7 @@ class TestMsgGetOwnershipProof:
             == "534c00190001a122407efc198211c81af4450f40b235d54775efd934d16b9e31c6ce9bad57070002483045022100e5eaf2cb0a473b4545115c7b85323809e75cb106175ace38129fd62323d73df30220363dbc7acb7afcda022b1f8d97acb8f47c42043cfe0595583aa26e30bc8b3bb50121032ef68318c8f6aaa0adec0199c69901f0db7d3485eb38d9ad235221dc3d61154b"
         )
 
+    @pytest.mark.skip_ui
     def test_fake_ownership_id(self, client):
         with pytest.raises(TrezorFailure, match="Invalid ownership identifier"):
             btc.get_ownership_proof(
